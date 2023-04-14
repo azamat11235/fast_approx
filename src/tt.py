@@ -83,8 +83,21 @@ class TT:
         for p in range(len(self._sizes)):
             core = np.empty((self._ranks[p] * other._ranks[p], self._sizes[p], self._ranks[p + 1] * other._ranks[p + 1]))
             for i in range(self._cores[p].shape[1]):
-                core[ :, i, : ] = np.kron(self._cores[p][ :, i, :], other._cores[p][ :, i, :])
+                core[ :, i, : ] = np.kron(self._cores[p][ :, i, : ], other._cores[p][ :, i, : ])
             cores.append(core)
+
+        return TT(cores=cores)
+
+    def __add__(self, other):
+        assert self._sizes == other._sizes
+
+        cores = []
+        cores.append(np.block([self._cores[0][0], other._cores[0][0]])[np.newaxis, :, : ])
+        for p in range(1, len(self._sizes) - 1):
+            a = np.concatenate((self._cores[p], np.zeros_like(self._cores[p])), axis=2)
+            b = np.concatenate((np.zeros_like(other._cores[p]), other._cores[p]), axis=2)
+            cores.append(np.concatenate((a, b), axis=0))
+        cores.append(np.vstack([self._cores[-1][ :, :, 0], other._cores[-1][ :, :, 0]])[ :, :, np.newaxis])
 
         return TT(cores=cores)
 
@@ -107,7 +120,7 @@ class TT:
         sizes = np.array(tensor.shape)
         cores = []
         for p in range(0, len(tensor.shape) - 1):
-            u, s, vh = svdr(tensor.reshape(ranks[p] * sizes[p], np.prod(sizes[p + 1 :])), ranks[p + 1])
+            u, s, vh = svdr(tensor.reshape(ranks[p] * sizes[p], np.prod(sizes[p + 1 : ])), ranks[p + 1])
             u = u.reshape(ranks[p], sizes[p], min(ranks[p + 1], vh.shape[0]))
             cores.append(u.reshape(ranks[p], sizes[p], min(ranks[p + 1], vh.shape[0])))
             tensor = (s * vh.T).T
