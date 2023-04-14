@@ -27,8 +27,36 @@ class TensorTrain:
         self._isLeftToRight = False
         self._isRightToLeft = False
 
-    def GetMinElement(self): # ALS
-        pass
+    def GetMinElement(self, eps=1e-8): # ALS
+        x = TensorTrain(cores=[core.copy() for core in self._cores])
+        prevMinElement = None
+        for _ in range(10):
+            x.Compress(eps)
+            for p in range(len(self._cores)):
+                # A * x = \lambda * x
+                m = self._ranks[p] * self._sizes[p]
+                n = self._ranks[p + 1]
+                x._cores[p][ :, :, :] = 0
+                # computing A
+                a = np.empty((m * n, m * n))
+                for i in range(m * n):
+                    x._cores[p][i // (self._sizes[p] * self._ranks[p + 1]) % self._ranks[p], i // self._ranks[p + 1] % self._sizes[p], i % self._ranks[p + 1]] = 1
+                    tmp = self * x
+                    x._cores[p][i // (self._sizes[p] * self._ranks[p + 1]) % self._ranks[p], i // self._ranks[p + 1] % self._sizes[p], i % self._ranks[p + 1]] = 0
+                    for j in range(i, m * n):
+                        x._cores[p][j // (self._sizes[p] * self._ranks[p + 1]) % self._ranks[p], j // self._ranks[p + 1] % self._sizes[p], j % self._ranks[p + 1]] = 1
+                        a[i, j] = TensorTrain.DotProduct(tmp, x)
+                        x._cores[p][j // (self._sizes[p] * self._ranks[p + 1]) % self._ranks[p], j // self._ranks[p + 1] % self._sizes[p], j % self._ranks[p + 1]] = 0
+                # computing the eigenvalues and eigenvectors
+                w, v = np.linalg.eigh(a, UPLO='U')
+                minElement = w[0]
+                # orthogonalization
+                q, r = np.linalg.qr(v[ :, 0].reshape(m, n))
+                if m < n:
+                    self._ranks[p + 1]
+                # update core
+                x._cores[p] = q.reshape(self._ranks[p], self._sizes[p], self._ranks[p + 1])
+        return minElement
 
     def Orthogonalize(self):
         # left to right

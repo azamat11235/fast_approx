@@ -1,9 +1,9 @@
 import numpy as np
+import truncated_svd
 from tensor_train import TensorTrain
-from truncatedSvd import TruncatedSvd
 
 
-def NLRT(tensor, ranks, truncatedSvd, itersNum):
+def NLRT(tensor, ranks, itersNum, truncatedSvd=truncated_svd.SVDr):
     '''https://arxiv.org/abs/2007.14137v2'''
     m = len(tensor.shape)
     X = [tensor.copy()] * m
@@ -18,7 +18,7 @@ def NLRT(tensor, ranks, truncatedSvd, itersNum):
             X[i] = Fold(u @ vh, i, tensor.shape)
     return X
 
-def NTTSVD(tensor, ranks, truncatedSvd, itersNum):
+def NTTSVD(tensor, ranks, itersNum, truncatedSvd=truncated_svd.SVDr):
     '''https://arxiv.org/abs/2209.02060'''
     tensor = tensor.copy()
     cores = TensorTrain.TTSVD(tensor, ranks, truncatedSvd)
