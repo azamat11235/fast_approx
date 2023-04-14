@@ -4,7 +4,7 @@ import utils
 import truncated_svd
 
 
-class TT:
+class TensorTrain:
     def __init__(self, cores=None, sizes=None, ranks=None, seed=None):
         if cores is not None:
             assert all(len(core.shape) == 3 for core in cores)
@@ -86,7 +86,7 @@ class TT:
                 core[ :, i, : ] = np.kron(self._cores[p][ :, i, : ], other._cores[p][ :, i, : ])
             cores.append(core)
 
-        return TT(cores=cores)
+        return TensorTrain(cores=cores)
 
     def __add__(self, other):
         assert self._sizes == other._sizes
@@ -99,10 +99,10 @@ class TT:
             cores.append(np.concatenate((a, b), axis=0))
         cores.append(np.vstack([self._cores[-1][ :, :, 0], other._cores[-1][ :, :, 0]])[ :, :, np.newaxis])
 
-        return TT(cores=cores)
+        return TensorTrain(cores=cores)
 
     def Norm(self):
-        return np.sqrt(TT.DotProduct(self, self))
+        return np.sqrt(TensorTrain.DotProduct(self, self))
 
     @staticmethod
     def DotProduct(tt1, tt2):

@@ -1,5 +1,5 @@
 import numpy as np
-from tt import TT
+from tensor_train import TensorTrain
 from truncatedSvd import TruncatedSvd
 
 
@@ -21,9 +21,9 @@ def NLRT(tensor, ranks, truncatedSvd, itersNum):
 def NTTSVD(tensor, ranks, truncatedSvd, itersNum):
     '''https://arxiv.org/abs/2209.02060'''
     tensor = tensor.copy()
-    cores = TT.TTSVD(tensor, ranks, truncatedSvd)
+    cores = TensorTrain.TTSVD(tensor, ranks, truncatedSvd)
     for _ in range(itersNum):
-        tensor = TT.GetFullTensor(cores)
+        tensor = TensorTrain.GetFullTensor(cores)
         tensor[tensor < 0] = 0
-        cores = TT.TTSVD(tensor, ranks, truncatedSvd)
+        cores = TensorTrain.TTSVD(tensor, ranks, truncatedSvd)
     return cores
