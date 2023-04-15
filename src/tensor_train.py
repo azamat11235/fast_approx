@@ -32,30 +32,30 @@ class TensorTrain:
         prevMinElement = None
         for _ in range(10):
             x.Compress(eps)
-            for p in range(len(self._cores)):
+            for p in range(len(x._cores)):
                 # A * x = \lambda * x
-                m = self._ranks[p] * self._sizes[p]
-                n = self._ranks[p + 1]
+                m = x._ranks[p] * x._sizes[p]
+                n = x._ranks[p + 1]
                 x._cores[p][ :, :, :] = 0
                 # computing A
                 a = np.empty((m * n, m * n))
                 for i in range(m * n):
-                    x._cores[p][i // (self._sizes[p] * self._ranks[p + 1]) % self._ranks[p], i // self._ranks[p + 1] % self._sizes[p], i % self._ranks[p + 1]] = 1
+                    x._cores[p][i // (x._sizes[p] * x._ranks[p + 1]) % x._ranks[p], i // x._ranks[p + 1] % x._sizes[p], i % x._ranks[p + 1]] = 1
                     tmp = self * x
-                    x._cores[p][i // (self._sizes[p] * self._ranks[p + 1]) % self._ranks[p], i // self._ranks[p + 1] % self._sizes[p], i % self._ranks[p + 1]] = 0
+                    x._cores[p][i // (x._sizes[p] * x._ranks[p + 1]) % x._ranks[p], i // x._ranks[p + 1] % x._sizes[p], i % x._ranks[p + 1]] = 0
                     for j in range(i, m * n):
-                        x._cores[p][j // (self._sizes[p] * self._ranks[p + 1]) % self._ranks[p], j // self._ranks[p + 1] % self._sizes[p], j % self._ranks[p + 1]] = 1
+                        x._cores[p][j // (x._sizes[p] * x._ranks[p + 1]) % x._ranks[p], j // x._ranks[p + 1] % x._sizes[p], j % x._ranks[p + 1]] = 1
                         a[i, j] = TensorTrain.DotProduct(tmp, x)
-                        x._cores[p][j // (self._sizes[p] * self._ranks[p + 1]) % self._ranks[p], j // self._ranks[p + 1] % self._sizes[p], j % self._ranks[p + 1]] = 0
+                        x._cores[p][j // (x._sizes[p] * x._ranks[p + 1]) % x._ranks[p], j // x._ranks[p + 1] % x._sizes[p], j % x._ranks[p + 1]] = 0
                 # computing the eigenvalues and eigenvectors
                 w, v = np.linalg.eigh(a, UPLO='U')
                 minElement = w[0]
                 # orthogonalization
                 q, r = np.linalg.qr(v[ :, 0].reshape(m, n))
                 if m < n:
-                    self._ranks[p + 1]
+                    x._ranks[p + 1]
                 # update core
-                x._cores[p] = q.reshape(self._ranks[p], self._sizes[p], self._ranks[p + 1])
+                x._cores[p] = q.reshape(x._ranks[p], x._sizes[p], x._ranks[p + 1])
         return minElement
 
     def Orthogonalize(self):
@@ -91,15 +91,15 @@ class TensorTrain:
             rank = min(m, n)
             if maxRank is not None:
                 rank = min(rank, maxRank)
-            curError = [sigma * sigma for sigma in s[rank : ]]
+            curError = sum([sigma * sigma for sigma in s[rank : ]])
             while rank > 0 and curError + (s[rank - 1] * s[rank - 1]) * p < maxError:
                 rank -= 1
                 curError += s[rank] * s[rank]
 
-            self._ranks[p] = rank
-            self._cores[p] = vh[ : rank, : ].reshape(self._ranks[p], self._sizes[p], self._ranks[p + 1])
+            self._cores[p] = vh[ : rank, : ].reshape(rank, self._sizes[p], self._ranks[p + 1])
             self._cores[p - 1] = self._cores[p - 1].reshape(-1, self._ranks[p]) @ u[ :, : rank]
-            self._cores[p - 1] = self._cores[p - 1].reshape(self._ranks[p - 1], self._sizes[p - 1], self._ranks[p])
+            self._cores[p - 1] = self._cores[p - 1].reshape(self._ranks[p - 1], self._sizes[p - 1], rank)
+            self._ranks[p] = rank
 
         self._isLeftToRight = False
         self._isRightToLeft = True
