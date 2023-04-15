@@ -30,7 +30,8 @@ class TensorTrain:
     def GetMinElement(self, eps=1e-8): # ALS
         x = TensorTrain(cores=[core.copy() for core in self._cores])
         prevMinElement = None
-        for _ in range(10):
+        itersNum = 2
+        for k in range(itersNum):
             x.Compress(eps)
             for p in range(len(x._cores)):
                 # A * x = \lambda * x
@@ -40,13 +41,13 @@ class TensorTrain:
                 # computing A
                 a = np.empty((m * n, m * n))
                 for i in range(m * n):
-                    x._cores[p][i // (x._sizes[p] * x._ranks[p + 1]) % x._ranks[p], i // x._ranks[p + 1] % x._sizes[p], i % x._ranks[p + 1]] = 1
+                    x._cores[p][x._getPos(p, i)] = 1
                     tmp = self * x
-                    x._cores[p][i // (x._sizes[p] * x._ranks[p + 1]) % x._ranks[p], i // x._ranks[p + 1] % x._sizes[p], i % x._ranks[p + 1]] = 0
+                    x._cores[p][x._getPos(p, i)] = 0
                     for j in range(i, m * n):
-                        x._cores[p][j // (x._sizes[p] * x._ranks[p + 1]) % x._ranks[p], j // x._ranks[p + 1] % x._sizes[p], j % x._ranks[p + 1]] = 1
+                        x._cores[p][x._getPos(p, j)] = 1
                         a[i, j] = TensorTrain.DotProduct(tmp, x)
-                        x._cores[p][j // (x._sizes[p] * x._ranks[p + 1]) % x._ranks[p], j // x._ranks[p + 1] % x._sizes[p], j % x._ranks[p + 1]] = 0
+                        x._cores[p][x._getPos(p, j)] = 0
                 # computing the eigenvalues and eigenvectors
                 w, v = np.linalg.eigh(a, UPLO='U')
                 minElement = w[0]
@@ -56,6 +57,8 @@ class TensorTrain:
                     x._ranks[p + 1]
                 # update core
                 x._cores[p] = q.reshape(x._ranks[p], x._sizes[p], x._ranks[p + 1])
+
+            print(k, minElement, TensorTrain.DotProduct(self * x, x) / TensorTrain.DotProduct(x, x))
         return minElement
 
     def Orthogonalize(self):
@@ -110,7 +113,7 @@ class TensorTrain:
         cores = []
         for p in range(len(self._sizes)):
             core = np.empty((self._ranks[p] * other._ranks[p], self._sizes[p], self._ranks[p + 1] * other._ranks[p + 1]))
-            for i in range(self._cores[p].shape[1]):
+            for i in range(self._sizes[p]):
                 core[ :, i, : ] = np.kron(self._cores[p][ :, i, : ], other._cores[p][ :, i, : ])
             cores.append(core)
 
@@ -122,8 +125,8 @@ class TensorTrain:
         cores = []
         cores.append(np.block([self._cores[0][0], other._cores[0][0]])[np.newaxis, :, : ])
         for p in range(1, len(self._sizes) - 1):
-            a = np.concatenate((self._cores[p], np.zeros_like(self._cores[p])), axis=2)
-            b = np.concatenate((np.zeros_like(other._cores[p]), other._cores[p]), axis=2)
+            a = np.concatenate((self._cores[p], np.zeros((self._ranks[p], self._sizes[p], other._ranks[p + 1]))), axis=2)
+            b = np.concatenate((np.zeros((other._ranks[p], other._sizes[p], self._ranks[p + 1])), other._cores[p]), axis=2)
             cores.append(np.concatenate((a, b), axis=0))
         cores.append(np.vstack([self._cores[-1][ :, :, 0], other._cores[-1][ :, :, 0]])[ :, :, np.newaxis])
 
@@ -131,6 +134,9 @@ class TensorTrain:
 
     def Norm(self):
         return np.sqrt(TensorTrain.DotProduct(self, self))
+
+    def _getPos(self, p, i):
+        return (i // (self._sizes[p] * self._ranks[p + 1]) % self._ranks[p], i // self._ranks[p + 1] % self._sizes[p], i % self._ranks[p + 1])
 
     @staticmethod
     def DotProduct(tt1, tt2):
@@ -164,7 +170,9 @@ class TensorTrain:
             fullTensor = utils.ModeProduct(fullTensor, utils.Unfold(cores[p], 0), p).reshape(newShape)
         return fullTensor.squeeze(-1)
 
-    def GetCores(self):
+    def GetCores(self, p=None):
+        if p is not None:
+            return self._cores[p]
         return self._cores
 
     def GetSizes(self):

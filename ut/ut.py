@@ -3,14 +3,15 @@ sys.path.append('../src')
 
 import unittest
 import numpy as np
-from alternating_projections import NLRT, NTTSVD
+from alternating_projections import NTTSVD
 from tensor_train import TensorTrain
 
 
 class TestTensorTrain(unittest.TestCase):
     def setUp(self):
         self._sizes = [10, 20, 20]
-        self._ranks = [1, 10, 10, 1]
+        self._ranks1 = self._ranks = [1, 10, 12, 1]
+        self._ranks2 = [1, 6, 9, 1]
         self._tol = 1e-8
         self._seed = 42
 
@@ -21,28 +22,28 @@ class TestTensorTrain(unittest.TestCase):
         self.assertTrue(np.linalg.norm(full - TensorTrain.GetFullTensor(TensorTrain.TTSVD(full, self._ranks))) / np.linalg.norm(full) < self._tol)
 
     def test_DotProduct(self):
-        tt1 = TensorTrain(sizes=self._sizes, ranks=self._ranks, seed=self._seed)
+        tt1 = TensorTrain(sizes=self._sizes, ranks=self._ranks1, seed=self._seed)
         full1 = TensorTrain.GetFullTensor(tt1.GetCores())
 
-        tt2 = TensorTrain(sizes=self._sizes, ranks=self._ranks, seed=self._seed)
+        tt2 = TensorTrain(sizes=self._sizes, ranks=self._ranks2, seed=self._seed)
         full2 = TensorTrain.GetFullTensor(tt2.GetCores())
 
         self.assertTrue(abs(TensorTrain.DotProduct(tt1, tt2) - (full1 * full2).sum()) < self._tol)
 
     def test_Sum(self):
-        tt1 = TensorTrain(sizes=self._sizes, ranks=self._ranks, seed=self._seed)
+        tt1 = TensorTrain(sizes=self._sizes, ranks=self._ranks1, seed=self._seed)
         full1 = TensorTrain.GetFullTensor(tt1.GetCores())
 
-        tt2 = TensorTrain(sizes=self._sizes, ranks=self._ranks, seed=self._seed)
+        tt2 = TensorTrain(sizes=self._sizes, ranks=self._ranks2, seed=self._seed)
         full2 = TensorTrain.GetFullTensor(tt2.GetCores())
 
         self.assertTrue(np.linalg.norm(full1 + full2 - TensorTrain.GetFullTensor((tt1 + tt2).GetCores())) < 1e-6)
 
     def test_HadamardProduct(self):
-        tt1 = TensorTrain(sizes=self._sizes, ranks=self._ranks, seed=self._seed)
+        tt1 = TensorTrain(sizes=self._sizes, ranks=self._ranks1, seed=self._seed)
         full1 = TensorTrain.GetFullTensor(tt1.GetCores())
 
-        tt2 = TensorTrain(sizes=self._sizes, ranks=self._ranks, seed=self._seed)
+        tt2 = TensorTrain(sizes=self._sizes, ranks=self._ranks2, seed=self._seed)
         full2 = TensorTrain.GetFullTensor(tt2.GetCores())
 
         self.assertTrue(np.linalg.norm(full1 * full2 - TensorTrain.GetFullTensor((tt1 * tt2).GetCores())) < self._tol)
