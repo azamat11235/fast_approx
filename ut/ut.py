@@ -83,5 +83,12 @@ class TestTensorTrain(unittest.TestCase):
 
         self.assertTrue(abs(tt.GetMinElement() - full.min()) < self._tol)
 
+    def test_GetMinElement2(self):
+        ranks = [1, 2, 3, 1]
+        tt = TensorTrain(sizes=self._sizes, ranks=ranks, seed=self._seed)
+        full = TensorTrain.GetFullTensor(tt.GetCores())
+
+        self.assertTrue(abs(tt.GetMinElement() - full.min()) < self._tol)
+
 if __name__ == '__main__':
     unittest.main()

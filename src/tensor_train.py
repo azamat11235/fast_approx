@@ -57,8 +57,6 @@ class TensorTrain:
                     x._ranks[p + 1]
                 # update core
                 x._cores[p] = q.reshape(x._ranks[p], x._sizes[p], x._ranks[p + 1])
-
-            print(k, minElement, TensorTrain.DotProduct(self * x, x) / TensorTrain.DotProduct(x, x))
         return minElement
 
     def Orthogonalize(self):
