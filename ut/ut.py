@@ -72,7 +72,9 @@ class TestTensorTrain(unittest.TestCase):
 
             self.assertTrue(np.linalg.norm(t @ t.T - np.eye(t.shape[0])) < self._tol)
 
-    def test_GetMinElement(self):
+    def test_Als(self):
+        itersNum = 5
+
         cores = []
         cores.append(np.array([[[1, 1], [2, 1]]]))
         cores.append(np.array([[[1], [1]], [[2], [1]]]))
@@ -81,14 +83,40 @@ class TestTensorTrain(unittest.TestCase):
         tt = TensorTrain(cores=cores)
         full = TensorTrain.GetFullTensor(tt.GetCores())
 
-        self.assertTrue(abs(tt.GetMinElement() - full.min()) < self._tol)
+        self.assertTrue(abs(tt.GetMinElement(algorithm='als', itersNum=itersNum) - full.min()) < self._tol)
 
-    def test_GetMinElement2(self):
+    def test_Als2(self):
+        itersNum = 5
         ranks = [1, 2, 3, 1]
+
         tt = TensorTrain(sizes=self._sizes, ranks=ranks, seed=self._seed)
         full = TensorTrain.GetFullTensor(tt.GetCores())
 
-        self.assertTrue(abs(tt.GetMinElement() - full.min()) < self._tol)
+        self.assertTrue(abs(tt.GetMinElement(algorithm='als', itersNum=itersNum) - full.min()) < self._tol)
+
+    def test_PowerMethod(self):
+        stage1Iters=10
+        stage2Iters=70
+
+        cores = []
+        cores.append(np.array([[[1, 1], [2, 1]]]))
+        cores.append(np.array([[[1], [1]], [[2], [1]]]))
+        cores.append(np.array([[[1], [2]]]))
+
+        tt = TensorTrain(cores=cores)
+        full = TensorTrain.GetFullTensor(tt.GetCores())
+
+        self.assertTrue(abs(tt.GetMinElement(algorithm='power', stage1Iters=stage1Iters, stage2Iters=stage2Iters) - full.min()) < self._tol)
+
+    def test_PowerMethod2(self):
+        stage1Iters=50
+        stage2Iters=200
+        ranks = [1, 2, 3, 1]
+
+        tt = TensorTrain(sizes=self._sizes, ranks=ranks, seed=self._seed)
+        full = TensorTrain.GetFullTensor(tt.GetCores())
+
+        self.assertTrue(abs(tt.GetMinElement(algorithm='power', stage1Iters=stage1Iters, stage2Iters=stage2Iters) - full.min()) < 1e-2)
 
 if __name__ == '__main__':
     unittest.main()

@@ -27,12 +27,18 @@ class TensorTrain:
         self._isLeftToRight = False
         self._isRightToLeft = False
 
-    def GetMinElement(self, eps=1e-8): # ALS
+    def GetMinElement(self, algorithm='power', *args, **kwargs):
+        if algorithm == 'als':
+            return self._Als(*args, **kwargs)
+        if algorithm == 'power':
+            return self._PowerMethod(*args, **kwargs)
+        assert(False, 'Unknown algorithm')
+
+    def _Als(self, itersNum, tol=1e-8): # ALS
         x = TensorTrain(cores=[core.copy() for core in self._cores])
         prevMinElement = None
-        itersNum = 2
         for k in range(itersNum):
-            x.Compress(eps)
+            x.Compress(tol)
             for p in range(len(x._cores)):
                 # A * x = \lambda * x
                 m = x._ranks[p] * x._sizes[p]
@@ -41,13 +47,13 @@ class TensorTrain:
                 # computing A
                 a = np.empty((m * n, m * n))
                 for i in range(m * n):
-                    x._cores[p][x._getPos(p, i)] = 1
+                    x._cores[p][x._GetPos(p, i)] = 1
                     tmp = self * x
-                    x._cores[p][x._getPos(p, i)] = 0
+                    x._cores[p][x._GetPos(p, i)] = 0
                     for j in range(i, m * n):
-                        x._cores[p][x._getPos(p, j)] = 1
+                        x._cores[p][x._GetPos(p, j)] = 1
                         a[i, j] = TensorTrain.DotProduct(tmp, x)
-                        x._cores[p][x._getPos(p, j)] = 0
+                        x._cores[p][x._GetPos(p, j)] = 0
                 # computing the eigenvalues and eigenvectors
                 w, v = np.linalg.eigh(a, UPLO='U')
                 minElement = w[0]
@@ -58,6 +64,28 @@ class TensorTrain:
                 # update core
                 x._cores[p] = q.reshape(x._ranks[p], x._sizes[p], x._ranks[p + 1])
         return minElement
+
+    def _PowerMethod(self, stage1Iters, stage2Iters, tol=1e-8):
+        x = TensorTrain(cores=[core.copy() for core in self._cores])
+        for _ in range(stage1Iters):
+            newX = self * x
+            newX.Compress(tol)
+            newX.Normalize()
+            x = newX
+        maxElement = TensorTrain.DotProduct(self * x, x)
+
+        rank1Tensor = TensorTrain.GetRank1Tensor(self._sizes)
+        rank1Tensor._cores[0] *= -maxElement
+        newTensor = self + rank1Tensor
+
+        x = TensorTrain(cores=[core.copy() for core in newTensor._cores])
+        for _ in range(stage2Iters):
+            newX = newTensor * x
+            newX.Compress(tol)
+            newX.Normalize()
+            x = newX
+
+        return TensorTrain.DotProduct(newTensor * x, x) + maxElement
 
     def Orthogonalize(self):
         # left to right
@@ -72,7 +100,7 @@ class TensorTrain:
             self._cores[p + 1] = self._cores[p + 1].reshape(self._ranks[p + 1], -1)
             self._cores[p + 1] = (r @ self._cores[p + 1]).reshape(min(m, n), self._sizes[p + 1], self._ranks[p + 2])
             if m < n:
-                self._ranks[p + 1]
+                self._ranks[p + 1] = m
 
         self._isLeftToRight = True
 
@@ -87,7 +115,7 @@ class TensorTrain:
             m = self._ranks[p]
             n = self._sizes[p] * self._ranks[p + 1]
             u, s, vh = np.linalg.svd(self._cores[p].reshape(m, n), full_matrices=False)
-            u = (u.T * s).T
+            u *= s
 
             rank = min(m, n)
             if maxRank is not None:
@@ -133,7 +161,10 @@ class TensorTrain:
     def Norm(self):
         return np.sqrt(TensorTrain.DotProduct(self, self))
 
-    def _getPos(self, p, i):
+    def Normalize(self):
+        self._cores[0] /= self.Norm()
+
+    def _GetPos(self, p, i):
         return (i // (self._sizes[p] * self._ranks[p + 1]) % self._ranks[p], i // self._ranks[p + 1] % self._sizes[p], i % self._ranks[p + 1])
 
     @staticmethod
@@ -167,6 +198,10 @@ class TensorTrain:
             newShape = list(fullTensor.shape[ : -1]) + list(cores[p].shape[1 : ])
             fullTensor = utils.ModeProduct(fullTensor, utils.Unfold(cores[p], 0), p).reshape(newShape)
         return fullTensor.squeeze(-1)
+
+    @staticmethod
+    def GetRank1Tensor(sizes):
+        return TensorTrain(cores=[np.ones((1, size, 1)) for size in sizes])
 
     def GetCores(self, p=None):
         if p is not None:
