@@ -65,25 +65,34 @@ class TensorTrain:
                 x._cores[p] = q.reshape(x._ranks[p], x._sizes[p], x._ranks[p + 1])
         return minElement
 
-    def _PowerMethod(self, stage1Iters, stage2Iters, tol=1e-8):
+    def _PowerMethod(self, stage1, stage2, tol=1e-8, debug=False):
         x = TensorTrain(cores=[core.copy() for core in self._cores])
-        for _ in range(stage1Iters):
+        # stage 1
+        for _ in range(stage1):
             newX = self * x
             newX.Compress(tol)
             newX.Normalize()
             x = newX
         maxElement = TensorTrain.DotProduct(self * x, x)
+        if debug:
+            fullTensor = TensorTrain.GetFullTensor(self._cores)
+            print('maxElement (true/found):', fullTensor.max(), maxElement)
+            print('x._ranks', x._ranks)
 
         rank1Tensor = TensorTrain.GetRank1Tensor(self._sizes)
         rank1Tensor._cores[0] *= -maxElement
         newTensor = self + rank1Tensor
 
+        # stage 2
         x = TensorTrain(cores=[core.copy() for core in newTensor._cores])
-        for _ in range(stage2Iters):
+        for _ in range(stage2):
             newX = newTensor * x
             newX.Compress(tol)
             newX.Normalize()
             x = newX
+        if debug:
+            print('minElement (true/found):', fullTensor.min(), TensorTrain.DotProduct(newTensor * x, x) + maxElement)
+            print('x._ranks', x._ranks)
 
         return TensorTrain.DotProduct(newTensor * x, x) + maxElement
 
