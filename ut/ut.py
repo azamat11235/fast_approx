@@ -3,7 +3,6 @@ sys.path.append('../src')
 
 import unittest
 import numpy as np
-from alternating_projections import NTTSVD
 from tensor_train import TensorTrain
 
 
@@ -83,7 +82,7 @@ class TestTensorTrain(unittest.TestCase):
         tt = TensorTrain(cores=cores)
         full = TensorTrain.GetFullTensor(tt.GetCores())
 
-        self.assertTrue(abs(tt.GetMinElement(algorithm='als', itersNum=itersNum) - full.min()) < self._tol)
+        self.assertTrue(abs(tt.GetMinElement(alg='als', itersNum=itersNum) - full.min()) < self._tol)
 
     def test_Als2(self):
         itersNum = 5
@@ -92,11 +91,11 @@ class TestTensorTrain(unittest.TestCase):
         tt = TensorTrain(sizes=self._sizes, ranks=ranks, seed=self._seed)
         full = TensorTrain.GetFullTensor(tt.GetCores())
 
-        self.assertTrue(abs(tt.GetMinElement(algorithm='als', itersNum=itersNum) - full.min()) < self._tol)
+        self.assertTrue(abs(tt.GetMinElement(alg='als', itersNum=itersNum) - full.min()) < self._tol)
 
     def test_PowerMethod(self):
-        stage1Iters=10
-        stage2Iters=70
+        stage1=10
+        stage2=70
 
         cores = []
         cores.append(np.array([[[1, 1], [2, 1]]]))
@@ -106,17 +105,17 @@ class TestTensorTrain(unittest.TestCase):
         tt = TensorTrain(cores=cores)
         full = TensorTrain.GetFullTensor(tt.GetCores())
 
-        self.assertTrue(abs(tt.GetMinElement(algorithm='power', stage1Iters=stage1Iters, stage2Iters=stage2Iters) - full.min()) < self._tol)
+        self.assertTrue(abs(tt.GetMinElement(alg='power', stage1=stage1, stage2=stage2) - full.min()) < self._tol)
 
     def test_PowerMethod2(self):
-        stage1Iters=50
-        stage2Iters=200
+        stage1=50
+        stage2=200
         ranks = [1, 2, 3, 1]
 
         tt = TensorTrain(sizes=self._sizes, ranks=ranks, seed=self._seed)
         full = TensorTrain.GetFullTensor(tt.GetCores())
 
-        self.assertTrue(abs(tt.GetMinElement(algorithm='power', stage1Iters=stage1Iters, stage2Iters=stage2Iters) - full.min()) < 1e-2)
+        self.assertTrue(abs(tt.GetMinElement(alg='power', stage1=stage1, stage2=stage2) - full.min()) < 1e-2)
 
 if __name__ == '__main__':
     unittest.main()

@@ -27,11 +27,11 @@ class TensorTrain:
         self._isLeftToRight = False
         self._isRightToLeft = False
 
-    def GetMinElement(self, algorithm='power', *args, **kwargs):
-        if algorithm == 'als':
+    def GetMinElement(self, alg='power', isNeedIndex=False, *args, **kwargs):
+        if alg == 'als':
             return self._Als(*args, **kwargs)
-        if algorithm == 'power':
-            return self._PowerMethod(*args, **kwargs)
+        if alg == 'power':
+            return self._PowerMethod(isNeedIndex=isNeedIndex, *args, **kwargs)
         assert(False, 'Unknown algorithm')
 
     def _Als(self, itersNum, tol=1e-8): # ALS
@@ -63,38 +63,45 @@ class TensorTrain:
                     x._ranks[p + 1]
                 # update core
                 x._cores[p] = q.reshape(x._ranks[p], x._sizes[p], x._ranks[p + 1])
+
         return minElement
 
-    def _PowerMethod(self, stage1, stage2, tol=1e-8, debug=False):
+    def _PowerMethod(self, stage1, stage2, tol=1e-8, isNeedIndex=False, debug=False):
         x = TensorTrain(cores=[core.copy() for core in self._cores])
         # stage 1
         for _ in range(stage1):
-            newX = self * x
-            newX.Compress(tol)
-            newX.Normalize()
-            x = newX
+            x = self * x
+            x.Compress(tol)
+            x.Normalize()
         maxElement = TensorTrain.DotProduct(self * x, x)
         if debug:
             fullTensor = TensorTrain.GetFullTensor(self._cores)
-            print('maxElement (true/found):', fullTensor.max(), maxElement)
-            print('x._ranks', x._ranks)
-
-        rank1Tensor = TensorTrain.GetRank1Tensor(self._sizes)
+            print('maxElement (true/found):', fullTensor.max(), '/', maxElement)
+        # stage 2
+        rank1Tensor = TensorTrain(cores=[np.ones((1, size, 1)) for size in self._sizes])
         rank1Tensor._cores[0] *= -maxElement
         newTensor = self + rank1Tensor
-
-        # stage 2
         x = TensorTrain(cores=[core.copy() for core in newTensor._cores])
         for _ in range(stage2):
-            newX = newTensor * x
-            newX.Compress(tol)
-            newX.Normalize()
-            x = newX
+            x = newTensor * x
+            x.Compress(tol)
+            x.Normalize()
         if debug:
-            print('minElement (true/found):', fullTensor.min(), TensorTrain.DotProduct(newTensor * x, x) + maxElement)
-            print('x._ranks', x._ranks)
+            print('minElement (true/found):', fullTensor.min(), '/', TensorTrain.DotProduct(newTensor * x, x) + maxElement)
 
-        return TensorTrain.DotProduct(newTensor * x, x) + maxElement
+        if not isNeedIndex:
+            return TensorTrain.DotProduct(newTensor * x, x) + maxElement
+
+        x.Compress(tol=tol, maxRank=1)
+        for _ in range(10):
+            x = newTensor * x
+            x.Compress(tol, maxRank=1)
+            x.Normalize()
+
+        if debug:
+            print('minElement_(true/found):', fullTensor.min(), '/', TensorTrain.DotProduct(newTensor * x, x) + maxElement)
+        return TensorTrain.DotProduct(newTensor * x, x) + maxElement,\
+               tuple((np.argmax(np.abs(core)) for core in x._cores))
 
     def Orthogonalize(self):
         # left to right
@@ -152,7 +159,7 @@ class TensorTrain:
                 core[ :, i, : ] = np.kron(self._cores[p][ :, i, : ], other._cores[p][ :, i, : ])
             cores.append(core)
 
-        return TensorTrain(cores=cores)
+        return TensorTrain(cores)
 
     def __add__(self, other):
         assert self._sizes == other._sizes
@@ -165,7 +172,7 @@ class TensorTrain:
             cores.append(np.concatenate((a, b), axis=0))
         cores.append(np.vstack([self._cores[-1][ :, :, 0], other._cores[-1][ :, :, 0]])[ :, :, np.newaxis])
 
-        return TensorTrain(cores=cores)
+        return TensorTrain(cores)
 
     def Norm(self):
         return np.sqrt(TensorTrain.DotProduct(self, self))
@@ -197,20 +204,61 @@ class TensorTrain:
             cores.append(u.reshape(ranks[p], sizes[p], min(ranks[p + 1], vh.shape[0])))
             tensor = (s * vh.T).T
         cores.append(tensor[ :, :, np.newaxis])
-        return cores
+        return TensorTrain(cores)
 
     @staticmethod
-    def GetFullTensor(cores):
+    def NTTSVD(tensor, ranks, itersNum, svdr=truncated_svd.SVDr, info=None):
+        '''https://arxiv.org/abs/2209.02060'''
+        tt = TensorTrain.TTSVD(tensor, ranks, svdr)
+        if info is not None:
+            origTensor = tensor
+            info.ProcessTensorTrain(origTensor, tt)
+        for _ in range(itersNum):
+            tensor = TensorTrain.GetFullTensor(tt)
+            tensor[tensor < 0] = 0
+            tt = TensorTrain.TTSVD(tensor, ranks, svdr)
+            if info is not None:
+                info.ProcessTensorTrain(origTensor, tt)
+        return tt
+
+    @staticmethod
+    def NTT(tensor, ranks, itersNum, delta=0.0, svdr=truncated_svd.SVDr, info=None, alg='power', *args, **kwargs):
+        '''https://link.springer.com/article/10.1134/S1995080222070228'''
+        tt = TensorTrain(cores=TensorTrain.TTSVD(tensor, ranks, svdr=svdr).GetCores())
+        if delta != 0:
+            rank1Tensor = TensorTrain(cores=[np.ones((1, size, 1)) for size in tt._sizes])
+            rank1Tensor._cores[0] *= delta * tt.GetMinElement(alg=alg, *args, **kwargs)
+            tt = tt + rank1Tensor
+            if info is not None:
+                info.ProcessTensorTrain(tensor, tt)
+        for i in range(itersNum):
+            minElement, index = tt.GetMinElement(alg=alg, isNeedIndex=True, *args, **kwargs)
+            if minElement >= 0:
+                break
+            rank1Tensor = TensorTrain(cores=[np.zeros((1, size, 1)) for size in tt._sizes])
+            for i, pos in enumerate(index):
+                rank1Tensor._cores[i][0, pos, 0] = 1
+            rank1Tensor._cores[0] *= -minElement
+
+            tt = tt + rank1Tensor
+
+            if info is not None:
+                info.ProcessTensorTrain(tensor, tt)
+
+        return tt
+
+    @staticmethod
+    def GetFullTensor(tt):
+        if isinstance(tt, TensorTrain):
+            cores = tt.GetCores()
+        else:
+            cores = tt
         assert len(cores) >= 3
         fullTensor = utils.ModeProduct(cores[1], cores[0].squeeze(0).T, 0)
         for p in range(2, len(cores)):
             newShape = list(fullTensor.shape[ : -1]) + list(cores[p].shape[1 : ])
             fullTensor = utils.ModeProduct(fullTensor, utils.Unfold(cores[p], 0), p).reshape(newShape)
         return fullTensor.squeeze(-1)
-
-    @staticmethod
-    def GetRank1Tensor(sizes):
-        return TensorTrain(cores=[np.ones((1, size, 1)) for size in sizes])
 
     def GetCores(self, p=None):
         if p is not None:
